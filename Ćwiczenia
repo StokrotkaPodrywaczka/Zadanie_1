@@ -1,0 +1,175 @@
+spring-boot-api-deployment/argo-appset/
+│     spring-boot-api-appset.yaml
+			apiVersion: argoproj.io/v1alpha1
+				kind: ApplicationSet
+				metadata:
+				  name: spring-boot-api-appset
+				  namespace: argocd
+				spec:
+				  generators:
+					- list:
+						elements:
+						  - cluster: dev-global-cluster-0
+							environment: dev
+							ingressHost: dev.api.example.com
+						  - cluster: prd-global-cluster-5
+							environment: prd
+							ingressHost: api.example.com
+				  template:
+					metadata:
+					  name: "{{cluster}}-spring-boot-api"
+					spec:
+					  project: devops-team-project
+					  # Auto-create the namespace if it does not exist.
+					  syncPolicy:
+						automated:
+						  prune: true
+						  selfHeal: true
+						syncOptions:
+						  - CreateNamespace=true
+					  destination:
+						# You can map the cluster values to the proper API endpoint URL here.
+						server: "https://{{cluster}}.k8s-api.example.com"
+						# The namespace to deploy into. We choose to name it according to the environment.
+						namespace: "spring-boot-api-{{environment}}"
+					  source:
+						repoURL: "https://github.com/<your-github-username>/spring-boot-api-deployment.git"
+						targetRevision: HEAD
+						chart: helm-chart
+						helm:
+						  # Use a values file per environment to override replicas and other settings.
+						  valueFiles:
+							- values-{{environment}}.yaml
+						  parameters:
+							- name: ingress.host
+							  value: "{{ingressHost}}"
+							- name: env
+							  value: "{{environment}}"
+helm-chart/
+    Chart.yaml
+		apiVersion: v2
+		name: spring-boot-api
+		description: A Helm chart to deploy a Spring Boot API in Kubernetes using GitOps.
+		version: 0.1.0
+appVersion: "1.0"
+	values.yaml
+		replicaCount: 3      # Default is set to 3 (for dev); overridden by values-prd.yaml for production.
+		image:
+		  repository: busybox
+		  tag: stable
+		  pullPolicy: IfNotPresent
+		env: dev
+		resources:
+		  requests:
+			cpu: "100m"
+			memory: "128Mi"
+		  limits:
+			cpu: "250m"
+			memory: "256Mi"
+		ingress:
+		  host: "example.com"  # This will be overridden by the ApplicationSet and/or values override.
+		  paths:
+			- path: /api
+			  port: 8080
+			- path: /logs
+			  port: 8081
+			- path: /soap
+			  port: 8082
+		configJson: |
+		  {
+			"message": "This is a sample JSON content."
+		  }
+ values-dev.yaml
+		replicaCount: 3
+		env: dev
+		ingress:
+		  host: "dev.api.example.com"		 
+values-prd.yaml
+		replicaCount: 5
+		env: prd
+		ingress:
+		host: "api.example.com"              
+templates/
+        helpers.tpl
+			{{/*
+			Return the base name for the application.
+			*/}}
+			{{- define "spring-boot-api.name" -}}
+			spring-boot-api
+			{{- end -}}
+
+			{{/*
+			Return the fully qualified name (including the release name) truncated to 63 characters.
+			*/}}
+			{{- define "spring-boot-api.fullname" -}}
+			{{- printf "%s-%s" .Release.Name (include "spring-boot-api.name" .) | trunc 63 | trimSuffix "-" -}}
+			{{- end -}}		
+namespace.yaml                 
+deployment.yaml                
+service.yaml
+		apiVersion: v1
+		kind: Service
+		metadata:
+		  name: {{ include "spring-boot-api.fullname" . }}
+		spec:
+		  type: ClusterIP
+		  selector:
+			app: {{ include "spring-boot-api.name" . }}
+		  ports:
+			- name: port-8080
+			  port: 8080
+			  targetPort: 8080
+			- name: port-8081
+			  port: 8081
+			  targetPort: 8081
+			- name: port-8082
+			  port: 8082
+			  targetPort: 8082
+                  
+ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+			metadata:
+			  name: {{ include "spring-boot-api.fullname" . }}
+			spec:
+			  rules:
+				- host: {{ .Values.ingress.host }}
+				  http:
+					paths:
+					  - path: /api
+						pathType: Prefix
+						backend:
+						  service:
+							name: {{ include "spring-boot-api.fullname" . }}
+							port:
+							  number: 8080
+					  - path: /logs
+						pathType: Prefix
+						backend:
+						  service:
+							name: {{ include "spring-boot-api.fullname" . }}
+							port:
+							  number: 8081
+					  - path: /soap
+						pathType: Prefix
+						backend:
+						  service:
+							name: {{ include "spring-boot-api.fullname" . }}
+							port:
+							  number: 8082                   
+configmap.yaml
+		apiVersion: v1
+		kind: ConfigMap
+		metadata:
+		  name: {{ include "spring-boot-api.fullname" . }}-config
+		data:
+		  config.json: |-
+		{{ .Values.configJson | indent 4 }}                 
+secret.yaml
+		apiVersion: v1
+		kind: Secret
+		metadata:
+		  name: {{ include "spring-boot-api.fullname" . }}-secret
+		type: Opaque
+		data:
+		  secretKey: {{ randAlphaNum 16 | b64enc | quote }}
