@@ -17,7 +17,6 @@ spring-boot-api/
             ├── deployment.yaml
             ├── service.yaml
             └── ingress.yaml
-
 Below are the file contents:
 Argo CD ApplicationSet (argocd/application-set.yaml)
 This file sets up two applications—one for development and one for production. It uses a list generator to feed in the cluster names and environment names. Note that we specify a candidate‑chosen Argo CD project (here, “inpost‑apps”) and the destination namespace is named with the environment (for example, “spring-boot‑dev” or “spring-boot‑prd”). The ApplicationSet will automatically create the namespace if it does not exist.
@@ -294,13 +293,7 @@ spec:
                   number: 8082
 Additional Considerations
 Dynamic Checksum Annotation: The deployment injects a checksum annotation based on the rendered ConfigMap so that updates to configuration automatically trigger a pod restart.
-
 Secrets & Random Values: The Secret manifest uses Helm’s random generator functions to create unpredictable key‑values.
-
 Environment Overrides: The use of dedicated environment files (values-dev.yaml and values-prd.yaml) ensures that settings like replica count, Spring profile, and Ingress host are swapped easily during deployment.
-
 GitOps Integration: With the Argo CD ApplicationSet file, the repository is ready for a GitOps workflow—with environment‑specific values and automatic namespace creation considered.
-
 This setup not only aligns with the requirements outlined in the assessment but is also structured so you (or a hiring team) can easily extend it—for example, by adding further customizations in additional environments or additional templates for other resources.
-
-Feel free to ask if you’d like further explanation on any part of this structure or ideas on how to extend this for even more robust deployments.
